@@ -1,0 +1,11 @@
+{:itonami.blueprint/id "cloud-itonami-isic-4620"
+ :itonami.blueprint/name "Wholesale of agricultural raw materials and live animals"
+ :itonami.blueprint/isic-rev5 "4620"
+ :itonami.blueprint/domain :upstream/agri-wholesale
+ :itonami.blueprint/license "AGPL-3.0-or-later"
+ :itonami.blueprint/social-impact [:biosecurity :animal-welfare :food-safety :transparency]
+ :itonami.blueprint/governor :agri-trading-governor
+ :itonami.blueprint/required-technologies [:robotics :identity :forms :dmn :bpmn :audit-ledger :optimization]
+ :itonami.blueprint/status :public-oss
+ :itonami.blueprint/robotics true
+ :itonami.blueprint/maturity :implemented}
