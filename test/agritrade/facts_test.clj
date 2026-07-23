@@ -53,3 +53,20 @@
     (is (not (facts/required-evidence-satisfied? "JPN" :plant animal-all))
         "the animal-health checklist does not satisfy the plant checklist -- the certificates are not interchangeable")
     (is (not (facts/required-evidence-satisfied? "ATL" :plant plant-all)) "no spec-basis -> never satisfied")))
+
+(deftest bra-has-a-verified-animal-transit-spec-basis
+  ;; Instrução Normativa GM/MAPA nº 9/2021 (D.O.U. 24/06/2021) -- fetched
+  ;; and read directly from MAPA's own official legislation listing this
+  ;; session, not training-time recall. BRA's :plant/phytosanitary
+  ;; spec-basis is deliberately NOT seeded yet (unverified) -- see the
+  ;; `agritrade.facts` ns docstring.
+  (let [entry (facts/spec-basis "BRA" :animal)]
+    (is (some? entry))
+    (is (string? (:provenance entry)))
+    (is (re-find #"gov\.br" (:provenance entry)))
+    (is (some #(re-find #"(?i)animal health" %) (facts/evidence-checklist "BRA" :animal)))
+    (is (not-any? #(re-find #"(?i)phytosanitary" %) (facts/evidence-checklist "BRA" :animal))))
+  (is (nil? (facts/spec-basis "BRA" :plant))
+      "BRA plant/phytosanitary spec-basis has not been independently verified -- must not silently claim coverage")
+  (is (contains? (set (:missing-jurisdictions (facts/coverage ["BRA" "JPN"]))) "BRA")
+      "coverage must keep reporting BRA as not-fully-covered until a verified :plant entry exists too"))

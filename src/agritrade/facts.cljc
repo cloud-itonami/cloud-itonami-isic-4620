@@ -71,6 +71,24 @@
       Kühn-Institut (JKI, plant) and the Friedrich-Loeffler-Institut
       (FLI, animal) under the Bundesministerium für Ernährung und
       Landwirtschaft (BMEL).
+    - Brazil (BRA) -- ANIMAL consignments only for now: Instrução
+      Normativa GM/MAPA nº 9, de 16 de junho de 2021 (D.O.U.
+      24/06/2021), issued by the Ministério da Agricultura, Pecuária e
+      Abastecimento (MAPA) / Secretaria de Defesa Agropecuária (SDA),
+      approves the printed model and establishes the electronic
+      format (e-GTA) of the Guia de Trânsito Animal (GTA) -- the
+      permit required nationwide for the transit of live animals,
+      fertile eggs and other animal-multiplication material between
+      establishments/jurisdictions inside Brazil. Fetched and read
+      directly from MAPA's own official legislation listing for this
+      subject (https://www.gov.br/agricultura/pt-br/assuntos/
+      sanidade-animal-e-vegetal/saude-animal/transito-animal/cgtqa-legis)
+      -- NOT training-time recall. BRA's PLANT/phytosanitary
+      spec-basis has NOT been independently verified and is
+      deliberately absent from the catalog below; see `coverage`,
+      which will correctly keep reporting BRA as not-fully-covered
+      until that companion entry is added with an equally verified
+      primary source.
 
   The required-evidence set mirrors the counterparty-diligence evidence
   every fleet sibling's catalog carries (credit-clearance record,
@@ -170,7 +188,20 @@
              :required-evidence ["credit-clearance record"
                                  "contract/PO"
                                  "sanctions-screening (OFAC/equivalent) record"
-                                 "animal health certificate (veterinary inspection)"]}}})
+                                 "animal health certificate (veterinary inspection)"]}}
+   ;; NOTE: BRA has an :animal entry only -- :plant/phytosanitary has
+   ;; NOT been independently verified yet and is deliberately omitted
+   ;; (see the ns docstring and `coverage`). Do not add a :plant map
+   ;; here without an equally verified primary source.
+   "BRA"
+   {:animal {:name "BRA" :kind :animal
+             :owner-authority "Ministério da Agricultura, Pecuária e Abastecimento (MAPA) / Secretaria de Defesa Agropecuária (SDA)"
+             :legal-basis "Instrução Normativa GM/MAPA nº 9, de 16 de junho de 2021 (D.O.U. 24/06/2021) -- Guia de Trânsito Animal (GTA/e-GTA)"
+             :provenance "https://www.gov.br/agricultura/pt-br/assuntos/sanidade-animal-e-vegetal/saude-animal/transito-animal/cgtqa-legis/in-mapa-no-9-16-06-2021.pdf"
+             :required-evidence ["credit-clearance record"
+                                 "contract/PO"
+                                 "sanctions-screening (OFAC/equivalent) record"
+                                 "animal health certificate (Guia de Trânsito Animal -- GTA/e-GTA)"]}}})
 
 (defn spec-basis
   "The [iso3 kind] requirement map, or nil -- nil means NO spec-basis,
