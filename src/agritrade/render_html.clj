@@ -1,0 +1,445 @@
+(ns agritrade.render-html
+  "Build-time HTML renderer for `docs/samples/operator-console.html`.
+
+  This drives the REAL actor stack -- `agritrade.store/seed-db` (the
+  deterministic MemStore seed), `agritrade.operation/build` (the
+  langgraph StateGraph with the AgriTradeAdvisor sealed into `:advise`),
+  the Agri Trading Governor (`agritrade.governor`) and the rollout phase
+  gate (`agritrade.phase`) -- and then renders ONLY what that run
+  actually produced: the agri-order records the store holds, the
+  biosecurity assessments the store committed, and the append-only audit
+  ledger.
+
+  Nothing here is hand-written HTML with invented numbers:
+
+    - every subject id driven below either exists in
+      `agritrade.store/demo-data` (ao-1 .. ao-8) or is registered by an
+      `:order/intake` op inside the demo itself (ao-9);
+    - every HARD-hold rule name shown comes off a real
+      `:governor-hold` ledger fact's `:basis`, produced by the
+      governor's own checks on deliberately non-compliant seed orders --
+      no rule keyword is typed into this file;
+    - the action-gate table is derived from `agritrade.phase/phases`
+      and `agritrade.governor/high-stakes`, not transcribed;
+    - the jurisdiction coverage block is `agritrade.facts/coverage`.
+
+  Only fact types the store ACTUALLY appends are branched on. The
+  `:commit` node appends `:committed`; the `:hold` node appends
+  `:governor-hold` / `:approval-rejected`. `:approval-granted` and
+  `:approval-requested` are emitted to the in-memory `:audit` channel
+  only and never reach the ledger, so this file does not pretend to
+  render them.
+
+  Deterministic: MemStore + mock advisor + pure `agritrade.registry`
+  record construction -- no clock, no randomness. Re-running produces
+  byte-identical output."
+  (:require [clojure.string :as str]
+            [agritrade.facts :as facts]
+            [agritrade.governor :as governor]
+            [agritrade.operation :as op]
+            [agritrade.phase :as phase]
+            [agritrade.store :as store]
+            [langgraph.graph :as g]))
+
+;; ----------------------------- driving the real actor -----------------------------
+
+(def ^:private operator
+  {:actor-id "op-1" :actor-role :trading-supervisor :phase phase/default-phase})
+
+(defn- exec! [actor tid request]
+  (g/run* actor {:request request :context operator} {:thread-id tid}))
+
+(defn- approve! [actor tid]
+  (g/run* actor {:approval {:status :approved :by "op-1"}}
+          {:thread-id tid :resume? true}))
+
+(defn- reject! [actor tid]
+  (g/run* actor {:approval {:status :rejected :by "op-1"}}
+          {:thread-id tid :resume? true}))
+
+(defn- verify+approve! [actor tid subject]
+  (exec! actor tid {:op :biosecurity/verify :subject subject})
+  (approve! actor tid))
+
+(defn- dispatch+approve! [actor tid subject]
+  (exec! actor tid {:op :delivery/dispatch :subject subject})
+  (approve! actor tid))
+
+(defn- settle+approve! [actor tid subject]
+  (exec! actor tid {:op :invoice/settle :subject subject})
+  (approve! actor tid))
+
+(def ^:private ao-9-patch
+  "A NEW agri-order registered BY the demo through `:order/intake` (the
+  one phase-3 auto-commit op), so the console has a subject whose whole
+  provenance is visible on the ledger rather than pre-seeded. Every key
+  is a field of the `agri-order` record in `agritrade.store` -- no
+  invented fields. `array-map` keeps `(keys patch)` (which the advisor
+  cites, and the ledger records) in insertion order, so the rendered
+  output stays byte-stable."
+  (array-map
+   :id "ao-9" :order-id "AO-2026-0009" :consignment-kind :plant
+   :commodity "Malting Barley (bulk)" :quantity 3000 :unit "metric tons"
+   :counterparty "Ibaraki Malt Traders Co" :price 268.00
+   :contract-terms "FOB elevator, net 30 days"
+   :credit-cleared? true :sanctions-screened? true
+   :phytosanitary-certificate? true :animal-health-certificate? true
+   :dispatched? false :invoiced? false
+   :jurisdiction "JPN" :status :intake
+   :dispatch-number nil :invoice-number nil))
+
+(defn run-demo!
+  "One deterministic operator session against the real actor. Returns the
+  store, which is the only thing `render` reads."
+  []
+  (let [db    (store/seed-db)
+        actor (op/build db)]
+    ;; --- ao-1: clean PLANT (grain) order, full lifecycle -------------------
+    (exec! actor "t1" {:op :order/intake :subject "ao-1"
+                       :patch {:id "ao-1" :counterparty "Akita Grain Traders Co"}})
+    (verify+approve!  actor "t2" "ao-1")
+    (dispatch+approve! actor "t3" "ao-1")
+    (settle+approve!   actor "t4" "ao-1")
+
+    ;; --- ao-7: clean ANIMAL (livestock) order, full lifecycle --------------
+    (exec! actor "t5" {:op :order/intake :subject "ao-7"
+                       :patch {:id "ao-7" :counterparty "Golden Hills Livestock Co"}})
+    (verify+approve!  actor "t6" "ao-7")
+    (dispatch+approve! actor "t7" "ao-7")
+    (settle+approve!   actor "t8" "ao-7")
+
+    ;; --- HARD holds: one seed order per isolated failure mode --------------
+    ;; ao-2 sits in a jurisdiction with no entry in `agritrade.facts`.
+    (exec! actor "t9" {:op :biosecurity/verify :subject "ao-2"})
+
+    ;; The rest verify cleanly first (so the evidence checklist is on file
+    ;; and the dispatch hold isolates exactly one rule), then dispatch.
+    (verify+approve! actor "t10" "ao-3")
+    (exec! actor "t11" {:op :delivery/dispatch :subject "ao-3"})
+
+    (verify+approve! actor "t12" "ao-4")
+    (exec! actor "t13" {:op :delivery/dispatch :subject "ao-4"})
+
+    (verify+approve! actor "t14" "ao-5")
+    (exec! actor "t15" {:op :delivery/dispatch :subject "ao-5"})
+
+    (verify+approve! actor "t16" "ao-6")
+    (exec! actor "t17" {:op :delivery/dispatch :subject "ao-6"})
+
+    (verify+approve! actor "t18" "ao-8")
+    (exec! actor "t19" {:op :delivery/dispatch :subject "ao-8"})
+
+    ;; --- double-actuation guards, on the already-completed ao-1 ------------
+    (exec! actor "t20" {:op :delivery/dispatch :subject "ao-1"})
+    (exec! actor "t21" {:op :invoice/settle    :subject "ao-1"})
+
+    ;; --- ao-9: registered here, then its verification is REJECTED by the
+    ;;     human approver (the escalate path can say no, not only yes) ------
+    (exec! actor "t22" {:op :order/intake :subject "ao-9" :patch ao-9-patch})
+    (exec! actor "t23" {:op :biosecurity/verify :subject "ao-9"})
+    (reject! actor "t23")
+    db))
+
+;; ----------------------------- html helpers -----------------------------
+
+(defn- esc [v]
+  (-> (str v)
+      (str/replace "&" "&amp;")
+      (str/replace "<" "&lt;")
+      (str/replace ">" "&gt;")
+      (str/replace "\"" "&quot;")))
+
+(defn- nm
+  "Keyword -> its printed name WITH the namespace kept (`:delivery/dispatch`
+  -> \"delivery/dispatch\"). `clojure.core/name` would drop the namespace and
+  make `:delivery/dispatch` and `:invoice/settle` indistinguishable from any
+  other `dispatch`/`settle`, which on an audit ledger is a real loss."
+  [v]
+  (if (keyword? v) (subs (str v) 1) (str v)))
+
+(defn- join-names [coll]
+  (if (seq coll) (str/join ", " (map nm coll)) "-"))
+
+(defn- td [& parts] (str "<td>" (apply str parts) "</td>"))
+(defn- tr [& cells] (str "      <tr>" (apply str cells) "</tr>"))
+(defn- rows [xs] (str/join "\n" xs))
+
+(defn- code [v] (str "<code>" (esc v) "</code>"))
+(defn- kind-chip [k]
+  (str "<span class=\"kind kind-" (esc (nm k)) "\">" (esc (nm k)) "</span>"))
+
+(defn- table [headers body-rows]
+  (str "<table><thead><tr>"
+       (apply str (map #(str "<th>" (esc %) "</th>") headers))
+       "</tr></thead><tbody>\n" (rows body-rows) "\n    </tbody></table>"))
+
+(defn- card [title lead body]
+  (str "<section class=\"card\"><h2>" (esc title) "</h2>"
+       (when lead (str "<p class=\"muted\">" lead "</p>"))
+       body "</section>"))
+
+;; ----------------------------- ledger-derived views -----------------------------
+
+(defn- facts-for [ledger subject]
+  (filterv #(= subject (:subject %)) ledger))
+
+(defn- outcome-cell
+  "The last ledger fact recorded for `subject`, rendered. Only the fact
+  types the store actually appends are named here."
+  [ledger subject]
+  (let [f (last (facts-for ledger subject))
+        basis (join-names (:basis f))]
+    (cond
+      (nil? f)
+      "<span class=\"muted\">no ledger activity</span>"
+
+      (= :committed (:t f))
+      (str "<span class=\"ok\">committed</span> <span class=\"muted\">"
+           (esc (nm (:op f))) "</span>")
+
+      (= :governor-hold (:t f))
+      (str "<span class=\"critical\">HARD hold</span> <span class=\"muted\">"
+           (esc (nm (:op f))) " · " (esc basis) "</span>")
+
+      (= :approval-rejected (:t f))
+      (str "<span class=\"warn\">approval rejected</span> <span class=\"muted\">"
+           (esc (nm (:op f))) " · " (esc basis) "</span>")
+
+      :else
+      (str "<span class=\"muted\">" (esc (nm (:t f))) "</span>"))))
+
+(defn- order-rows [db ledger]
+  (for [o (store/all-agri-orders db)]
+    (tr (td (code (:id o)))
+        (td (esc (:order-id o)))
+        (td (kind-chip (:consignment-kind o)))
+        (td (esc (:commodity o)))
+        (td "<span class=\"num\">" (esc (:quantity o)) "</span> " (esc (:unit o)))
+        (td (esc (:counterparty o)))
+        (td (esc (:jurisdiction o)))
+        (td (if (:dispatch-number o) (code (:dispatch-number o))
+                "<span class=\"muted\">-</span>"))
+        (td (if (:invoice-number o) (code (:invoice-number o))
+                "<span class=\"muted\">-</span>"))
+        (td (outcome-cell ledger (:id o))))))
+
+(defn- hold-rows
+  "Every HARD hold the governor actually produced, straight off the
+  ledger -- rule keyword, the op that triggered it, and the governor's
+  own `:detail` text."
+  [ledger]
+  (for [f ledger
+        :when (= :governor-hold (:t f))
+        v (:violations f)]
+    (tr (td "<span class=\"critical\">" (esc (nm (:rule v))) "</span>")
+        (td (code (nm (:op f))))
+        (td (code (:subject f)))
+        (td "<span class=\"num\">" (esc (:confidence f)) "</span>")
+        (td "<span class=\"muted\">" (esc (:detail v)) "</span>"))))
+
+(defn- assessment-rows [db]
+  (for [o (store/all-agri-orders db)
+        :let [a (store/assessment-of db (:id o))]
+        :when a]
+    (tr (td (code (:id o)))
+        (td (esc (:jurisdiction a)))
+        (td (kind-chip (:consignment-kind a)))
+        (td (esc (or (:legal-basis a) "-")))
+        (td (if (:spec-basis a) (code (:spec-basis a))
+                "<span class=\"critical\">none</span>"))
+        (td "<span class=\"num\">" (count (:checklist a)) "</span> / "
+            "<span class=\"num\">"
+            (count (facts/evidence-checklist (:jurisdiction a) (:consignment-kind a)))
+            "</span>")
+        (td (if (:approved-by a) (esc (:approved-by a))
+                "<span class=\"muted\">-</span>")))))
+
+(defn- gate-rows
+  "Derived from `agritrade.phase/phases` at the operator's phase plus
+  `agritrade.governor/high-stakes` -- not transcribed from prose."
+  []
+  (let [ph (:phase operator)
+        {:keys [writes auto]} (get phase/phases ph)]
+    (for [o (sort-by str phase/write-ops)]
+      (tr (td (code (nm o)))
+          (td (if (contains? writes o)
+                "<span class=\"ok\">yes</span>"
+                "<span class=\"critical\">no</span>"))
+          (td (cond
+                (contains? governor/high-stakes o)
+                "<span class=\"warn\">human approval ALWAYS (actuation — never auto at any phase)</span>"
+                (contains? auto o)
+                "<span class=\"ok\">auto-commit when governor-clean</span>"
+                :else
+                "<span class=\"warn\">human approval (phase gate)</span>"))))))
+
+(defn- ledger-rows [ledger]
+  (map-indexed
+   (fn [i f]
+     (tr (td "<span class=\"num\">" i "</span>")
+         (td (esc (nm (:t f))))
+         (td (code (nm (:op f))))
+         (td (code (:subject f)))
+         (td (esc (nm (or (:disposition f) "-"))))
+         (td (code (join-names (:basis f))))
+         (td "<span class=\"muted\">"
+             (esc (or (:summary f)
+                      (some->> (:violations f) (map :detail) (str/join " / "))
+                      ""))
+             "</span>")))
+   ledger))
+
+(defn- record-rows [history]
+  (for [r history]
+    (tr (td (code (get r "record_id")))
+        (td (esc (get r "kind")))
+        (td (code (get r "agri_order_id")))
+        (td (esc (get r "jurisdiction")))
+        (td (if (get r "immutable")
+              "<span class=\"ok\">immutable</span>"
+              "<span class=\"warn\">mutable</span>")))))
+
+(defn- coverage-rows []
+  (let [c (facts/coverage)]
+    [(tr (td "jurisdictions with BOTH :plant and :animal spec-basis")
+         (td "<span class=\"num\">" (:covered c) "</span> / "
+             "<span class=\"num\">" (:requested c) "</span>"))
+     (tr (td "covered") (td (code (join-names (:covered-jurisdictions c)))))
+     (tr (td "not fully covered")
+         (td (if (seq (:missing-jurisdictions c))
+               (str "<span class=\"warn\">" (esc (join-names (:missing-jurisdictions c))) "</span>")
+               "<span class=\"muted\">-</span>")))
+     (tr (td "note") (td "<span class=\"muted\">" (esc (:note c)) "</span>"))]))
+
+;; ----------------------------- page -----------------------------
+
+(def ^:private css
+  (str "*{box-sizing:border-box}"
+       "body{font:14px/1.55 system-ui,-apple-system,'Hiragino Kaku Gothic ProN',sans-serif;"
+       "margin:0;color:#1a1a1a;background:#fafafa}"
+       "header.bar{display:flex;align-items:baseline;gap:12px;padding:14px 22px;"
+       "background:#fff;border-bottom:1px solid #e5e5e5}"
+       "header.bar h1{font-size:17px;margin:0;font-weight:600}"
+       "header.bar .badge{margin-left:auto;font-size:12px;color:#666}"
+       "main{max-width:1180px;margin:22px auto;padding:0 20px}"
+       ".card{background:#fff;border:1px solid #e5e5e5;border-radius:8px;"
+       "padding:16px 18px;margin-bottom:16px}"
+       "h2{margin:0 0 6px;font-size:15px}"
+       "table{width:100%;border-collapse:collapse;font-size:13px}"
+       "th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #f0f0f0;"
+       "vertical-align:top}"
+       "th{font-weight:600;color:#555;font-size:11px;text-transform:uppercase;"
+       "letter-spacing:.04em;white-space:nowrap}"
+       ".num{font-variant-numeric:tabular-nums}"
+       ".muted{color:#888}"
+       ".ok{color:#137a3f}"
+       ".warn{color:#b25c00}"
+       ".critical{color:#b3261e;font-weight:600}"
+       "code{background:#f2f2f2;padding:1px 5px;border-radius:3px;font-size:12px}"
+       ".kind{padding:1px 7px;border-radius:10px;font-size:11px}"
+       ".kind-plant{color:#2e7d32;background:#e8f5e9}"
+       ".kind-animal{color:#6a1b9a;background:#f3e5f5}"))
+
+(defn render [db]
+  (let [ledger (vec (store/ledger db))
+        holds  (filterv #(= :governor-hold (:t %)) ledger)
+        rules  (->> holds (mapcat :basis) distinct sort vec)]
+    (str
+     "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+     "<title>cloud-itonami-isic-4620 · agritrade operator console</title>"
+     "<style>" css "</style></head><body>\n"
+     "<header class=\"bar\"><h1>Wholesale of Agricultural Raw Materials and Live Animals (ISIC 4620)"
+     " — <code>agritrade</code> operator console</h1>"
+     "<span class=\"badge\">read-only · governor-gated · human sign-off required</span></header>\n<main>\n"
+
+     (card "How this page was produced"
+           (str "Generated by <code>agritrade.render-html</code> at build time by running the REAL actor: "
+                "<code>agritrade.store/seed-db</code> → <code>agritrade.operation/build</code> "
+                "(langgraph StateGraph) → <code>agritrade.governor</code> → <code>agritrade.phase</code>. "
+                "Every row below is read back out of the store and its append-only ledger after that run. "
+                "No hand-written HTML, no invented subjects, no invented rule names.")
+           (table ["metric" "value"]
+                  [(tr (td "operator context")
+                       (td (code (pr-str operator))))
+                   (tr (td "phase")
+                       (td (code (:phase operator)) " "
+                           (esc (:label (get phase/phases (:phase operator))))))
+                   (tr (td "confidence floor")
+                       (td "<span class=\"num\">" governor/confidence-floor "</span>"))
+                   (tr (td "agri-orders in store")
+                       (td "<span class=\"num\">" (count (store/all-agri-orders db)) "</span>"))
+                   (tr (td "ledger facts")
+                       (td "<span class=\"num\">" (count ledger) "</span>"))
+                   (tr (td "HARD holds produced by the governor")
+                       (td "<span class=\"critical num\">" (count holds) "</span>"
+                           " <span class=\"muted\">rules fired: " (esc (join-names rules)) "</span>"))]))
+
+     (card "Agri-orders"
+           (str "<code>ao-1</code>–<code>ao-8</code> come from <code>agritrade.store/demo-data</code>; "
+                "<code>ao-9</code> was registered by this very demo through an "
+                "<code>:order/intake</code> op (the only op phase 3 lets auto-commit). "
+                "Dispatch/invoice numbers are the drafts <code>agritrade.registry</code> minted "
+                "when the human approver signed off.")
+           (table ["id" "order" "kind" "commodity" "quantity" "counterparty"
+                   "juris." "dispatch #" "invoice #" "last ledger outcome"]
+                  (order-rows db ledger)))
+
+     (card "HARD governor holds (un-overridable)"
+           (str "Each row is one <code>:governor-hold</code> ledger fact written by the "
+                "<code>:hold</code> node. The rule keyword and the detail text are the governor's "
+                "own output — a human approver never sees these, because the graph routes "
+                "<code>:hold</code> without passing through <code>:request-approval</code>.")
+           (table ["rule" "op" "subject" "advisor confidence" "governor detail"]
+                  (hold-rows ledger)))
+
+     (card "Committed biosecurity assessments"
+           (str "Written by the <code>:commit</code> node after a human approved the "
+                "<code>:biosecurity/verify</code> escalation. The checklist column compares what "
+                "was committed against <code>agritrade.facts/evidence-checklist</code> for that "
+                "jurisdiction AND consignment kind — ISIC 4620 spans two genuinely different "
+                "biosecurity regimes, so the same country carries two different statutes.")
+           (table ["order" "juris." "kind" "legal basis" "spec-basis" "checklist" "approved by"]
+                  (assessment-rows db)))
+
+     (card "Action gate"
+           (str "Derived from <code>agritrade.phase/phases</code> at phase "
+                (:phase operator) " and <code>agritrade.governor/high-stakes</code>.")
+           (table ["op" "writable at this phase" "gate"] (gate-rows)))
+
+     (card "Audit ledger (append-only)"
+           (str "The complete ledger, in write order. Only <code>:committed</code>, "
+                "<code>:governor-hold</code> and <code>:approval-rejected</code> reach it — "
+                "<code>:approval-granted</code> / <code>:approval-requested</code> live on the "
+                "in-memory <code>:audit</code> channel only.")
+           (table ["#" "fact" "op" "subject" "disposition" "basis" "detail"]
+                  (ledger-rows ledger)))
+
+     (card "Draft agri-delivery records"
+           "Unsigned drafts built by <code>agritrade.registry/register-delivery-record</code>."
+           (table ["record id" "kind" "agri-order" "juris." "immutability"]
+                  (record-rows (store/delivery-history db))))
+
+     (card "Draft agri-invoice records"
+           "Unsigned drafts built by <code>agritrade.registry/register-invoice-record</code>."
+           (table ["record id" "kind" "agri-order" "juris." "immutability"]
+                  (record-rows (store/invoice-history db))))
+
+     (card "Jurisdiction coverage (honest)"
+           "<code>agritrade.facts/coverage</code>, reported as-is."
+           (table ["item" "value"] (coverage-rows)))
+
+     "</main></body></html>\n")))
+
+(defn -main [& args]
+  (let [out (or (first args) "docs/samples/operator-console.html")
+        db  (run-demo!)
+        f   (java.io.File. out)]
+    (some-> (.getParentFile f) (.mkdirs))
+    (spit f (render db))
+    (let [ledger (store/ledger db)
+          holds  (filter #(= :governor-hold (:t %)) ledger)]
+      (println "wrote" out
+               "-" (count ledger) "ledger facts,"
+               (count holds) "HARD holds,"
+               "rules:" (pr-str (vec (sort (distinct (mapcat :basis holds)))))))))
