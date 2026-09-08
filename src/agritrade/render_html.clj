@@ -33,7 +33,7 @@
   Deterministic: MemStore + mock advisor + pure `agritrade.registry`
   record construction -- no clock, no randomness. Re-running produces
   byte-identical output."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [agritrade.facts :as facts]
             [agritrade.governor :as governor]
             [agritrade.operation :as op]

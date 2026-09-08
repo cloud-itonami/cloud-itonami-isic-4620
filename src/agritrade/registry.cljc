@@ -27,7 +27,7 @@
   grain, feed, seed, fibre or live animals, or settling a real invoice
   itself (that is `agritrade.operation`'s `:delivery/dispatch`/
   `:invoice/settle`, always human-gated -- see README `Actuation`)."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn- unsigned-certificate
   "Every certificate this actor produces is UNSIGNED -- signature is
@@ -64,7 +64,7 @@
     (throw (ex-info "agri-delivery: jurisdiction required" {})))
   (when (< sequence 0)
     (throw (ex-info "agri-delivery: sequence must be >= 0" {})))
-  (let [delivery-number (str (str/upper-case jurisdiction) "-DELIVERY-" (zero-pad sequence 6))
+  (let [delivery-number (str (str/upper jurisdiction) "-DELIVERY-" (zero-pad sequence 6))
         record {"record_id" delivery-number
                 "kind" "agri-delivery-draft"
                 "agri_order_id" agri-order-id
@@ -89,7 +89,7 @@
     (throw (ex-info "agri-invoice: jurisdiction required" {})))
   (when (< sequence 0)
     (throw (ex-info "agri-invoice: sequence must be >= 0" {})))
-  (let [invoice-number (str (str/upper-case jurisdiction) "-INVOICE-" (zero-pad sequence 6))
+  (let [invoice-number (str (str/upper jurisdiction) "-INVOICE-" (zero-pad sequence 6))
         record {"record_id" invoice-number
                 "kind" "agri-invoice-draft"
                 "agri_order_id" agri-order-id
