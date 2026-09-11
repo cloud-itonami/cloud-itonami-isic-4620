@@ -70,7 +70,7 @@ Live Animals, ISIC 4620) and to the four `:social-impact` tags in
 `:transparency`).
 
 This is the rule the companion contract test
-(`test/agritrade/governor_contract_test.clj`) encodes end-to-end: the
+(`test/agritrade/governor_contract_test.cljk`) encodes end-to-end: the
 AgriTradeAdvisor never dispatches a consignment to a counterparty or
 settles an invoice the Agri Trading Governor would reject,
 `:delivery/dispatch` and `:invoice/settle` NEVER auto-commit at any
