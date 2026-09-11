@@ -268,7 +268,7 @@ the full reasoning.
   regime under one classification.
 - `MemStore` || `DatomicStore` parity is proven by
   `test/agritrade/store_contract_test.cljk`.
-- The demo (`clojure -M:dev:run`) walks two clean lifecycles (one grain
+- The demo (`kbb -M:dev:run`) walks two clean lifecycles (one grain
   consignment, one livestock consignment) end-to-end, plus every
   HARD-hold scenario (no spec-basis, credit-uncleared, contract-missing,
   phytosanitary-certificate-missing, animal-health-certificate-missing,
