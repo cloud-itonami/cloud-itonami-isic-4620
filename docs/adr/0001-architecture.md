@@ -164,7 +164,7 @@ prior governor's guards establish, informed by `cloud-itonami-isic-
 `agritrade.store/Store` is implemented by both `MemStore` (atom-backed,
 default for dev/tests/demo) and `DatomicStore` (`langchain.db`-backed),
 proven to satisfy the same contract in
-`test/agritrade/store_contract_test.clj`. The ledger stays append-only
+`test/agritrade/store_contract_test.cljk`. The ledger stays append-only
 on every backend: which agri-order was verified for a jurisdiction/kind
 with no official spec-basis, which counterparty had credit-uncleared /
 no contract / a missing phytosanitary or animal-health certificate / an
@@ -267,7 +267,7 @@ the full reasoning.
   whose ISIC code spans more than one genuinely distinct regulatory
   regime under one classification.
 - `MemStore` || `DatomicStore` parity is proven by
-  `test/agritrade/store_contract_test.clj`.
+  `test/agritrade/store_contract_test.cljk`.
 - The demo (`clojure -M:dev:run`) walks two clean lifecycles (one grain
   consignment, one livestock consignment) end-to-end, plus every
   HARD-hold scenario (no spec-basis, credit-uncleared, contract-missing,

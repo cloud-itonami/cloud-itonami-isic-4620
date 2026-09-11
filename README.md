@@ -46,7 +46,7 @@ different biosecurity regimes -- agricultural raw materials (grain,
 feed, seed, fibre; phytosanitary/plant-health law) and live animals
 (livestock; animal/veterinary-health law) -- governed by different
 statutes, sometimes different agencies, even within the same country.
-See `src/agritrade/facts.cljc` and `src/agritrade/governor.cljc` for
+See `src/agritrade/facts.cljk` and `src/agritrade/governor.cljk` for
 how this is modeled: a `:consignment-kind` (`:plant` | `:animal`) on
 every `agri-order`, a jurisdiction catalog keyed by BOTH jurisdiction
 and kind, and TWO separate certificate-missing HARD checks
@@ -103,7 +103,7 @@ any phase, by construction.** Two independent layers enforce this
 (`agritrade.governor`'s `:delivery/dispatch`/`:invoice/settle`
 high-stakes gate and `agritrade.phase`'s phase table, which never puts
 either op in any phase's `:auto` set) -- see `agritrade.phase`'s
-docstring and `test/agritrade/phase_test.clj`'s
+docstring and `test/agritrade/phase_test.cljk`'s
 `delivery-dispatch-never-auto-at-any-phase`/
 `invoice-settle-never-auto-at-any-phase`. The actor may draft, check
 and recommend; a human trading supervisor is always the one who
@@ -216,14 +216,14 @@ robotics/identity/forms/dmn/bpmn/audit-ledger stack.
 
 | File | Role |
 |---|---|
-| `src/agritrade/store.cljc` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + delivery AND invoice history (dual history). The double-actuation guard checks dedicated `:dispatched?`/`:invoiced?` booleans rather than a `:status` value |
-| `src/agritrade/registry.cljc` | Delivery/invoice draft records (record construction only -- the Agri Trading Governor's checks are direct entity booleans, so there are no pure range-check functions to host here) |
-| `src/agritrade/facts.cljc` | Per-jurisdiction, per-consignment-kind (`:plant`/`:animal`) phytosanitary / animal-health / sanctions catalog with an official spec-basis citation per entry, honest coverage reporting |
-| `src/agritrade/agritradeadvisor.cljc` | **AgriTradeAdvisor** -- `mock-advisor` ‖ `llm-advisor`; intake/biosecurity-verification/delivery/invoice proposals |
-| `src/agritrade/governor.cljc` | **Agri Trading Governor** -- 7 HARD checks (spec-basis · evidence-incomplete · credit-uncleared · contract-missing · phytosanitary-certificate-missing · animal-health-certificate-missing · counterparty-sanctions-flag-unresolved) + 2 double-actuation guards + 1 soft (confidence/actuation gate) |
-| `src/agritrade/phase.cljc` | **Phase 0→3** -- read-only → assisted intake → assisted verify → supervised (delivery/invoice always human; order intake is the ONLY auto-eligible op, no direct capital risk) |
-| `src/agritrade/operation.cljc` | **OperationActor** -- langgraph StateGraph |
-| `src/agritrade/sim.cljc` | demo driver |
+| `src/agritrade/store.cljk` | **Store** protocol -- `MemStore` ‖ `DatomicStore` (`langchain.db`) + append-only audit ledger + delivery AND invoice history (dual history). The double-actuation guard checks dedicated `:dispatched?`/`:invoiced?` booleans rather than a `:status` value |
+| `src/agritrade/registry.cljk` | Delivery/invoice draft records (record construction only -- the Agri Trading Governor's checks are direct entity booleans, so there are no pure range-check functions to host here) |
+| `src/agritrade/facts.cljk` | Per-jurisdiction, per-consignment-kind (`:plant`/`:animal`) phytosanitary / animal-health / sanctions catalog with an official spec-basis citation per entry, honest coverage reporting |
+| `src/agritrade/agritradeadvisor.cljk` | **AgriTradeAdvisor** -- `mock-advisor` ‖ `llm-advisor`; intake/biosecurity-verification/delivery/invoice proposals |
+| `src/agritrade/governor.cljk` | **Agri Trading Governor** -- 7 HARD checks (spec-basis · evidence-incomplete · credit-uncleared · contract-missing · phytosanitary-certificate-missing · animal-health-certificate-missing · counterparty-sanctions-flag-unresolved) + 2 double-actuation guards + 1 soft (confidence/actuation gate) |
+| `src/agritrade/phase.cljk` | **Phase 0→3** -- read-only → assisted intake → assisted verify → supervised (delivery/invoice always human; order intake is the ONLY auto-eligible op, no direct capital risk) |
+| `src/agritrade/operation.cljk` | **OperationActor** -- langgraph StateGraph |
+| `src/agritrade/sim.cljk` | demo driver |
 | `test/agritrade/*_test.clj` | governor contract · phase invariants · store parity · registry conformance · facts coverage |
 
 ## Business-process coverage (honest)
