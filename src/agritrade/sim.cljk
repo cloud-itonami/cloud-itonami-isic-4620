@@ -1,5 +1,5 @@
 (ns agritrade.sim
-  "Demo driver -- `clojure -M:dev:run`. Walks TWO clean agri-orders (one
+  "Demo driver -- `kbb -M:dev:run`. Walks TWO clean agri-orders (one
   `:plant` grain consignment, one `:animal` livestock consignment)
   through intake -> biosecurity verification -> delivery (escalate/
   approve/commit) -> invoice settlement (escalate/approve/commit), then
