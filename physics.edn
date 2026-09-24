@@ -1,0 +1,33 @@
+;; What this vertical's robot physically does, declared for
+;; kotoba.robotics.process (kotoba-lang/robotics). `kbb -M:dev:physics` runs it.
+;;
+;; README "Robotics premise": an autonomous elevator-loadout robot handles
+;; grain, feed, seed and fibre at the elevator under the actor (ISIC 4620
+;; agricultural raw-materials wholesale). The physical work: a palletizing
+;; arm stacking bagged seed and feed, and a forklift carrying the finished
+;; pallets with the forks raised.
+;;
+;; Every number without a cited source is marked `estimate` in its :basis.
+;; Replacing an estimate with a sourced value is this bot's growth work.
+{:physics/schema "itonami.physical-ai.spec.v1"
+ :repo "cloud-itonami/cloud-itonami-isic-4620"
+ :cases
+ [{:id :palletize-seed-sacks
+   :kind :manipulator
+   :procedure "palletizing arm lifts a filled seed/feed sack off the bagging conveyor and places it on the pallet's top layer"
+   :params {:l1-m 1.00 :l2-m 0.90 :m1-kg 30.0 :m2-kg 18.0
+            :from [1.30 0.30] :to [0.80 1.20] :duration-s 2.5 :steps 500}
+   :sweep {:param :payload-kg :values [10.0 20.0 25.0 40.0 50.0]}
+   :quantity :peak-tau1-nm
+   :limit {:max 900.0 :basis "estimate: continuous shoulder torque of a ~40 kg-class palletizing arm"}
+   :boundary {:lo 1.0 :hi 120.0}}
+  {:id :sack-pallet-raised-forks
+   :kind :transport
+   :procedure "forklift carries a 1000 kg pallet of sacks with the forks raised toward the stacking height and brakes hard at 2.5 m/s2"
+   :params {:mass-kg 2800.0 :payload-kg 1000.0 :distance-m 40.0 :v-max-mps 2.5 :a-max-mps2 0.8
+            :brake-decel-mps2 2.5 :drive-force-n 9000.0 :crr 0.02 :cog-height-m 0.60
+            :support-half-length-m 0.70 :max-time-s 1200.0}
+   :sweep {:param :payload-cog-height-m :values [0.5 1.0 1.5 2.0 2.5]}
+   :quantity :min-tipover-margin
+   :limit {:min 0.65 :basis "estimate: longitudinal stability reserve kept while travelling; the real rule is 'travel with the load lowered', this sets how high is still tolerable"}
+   :boundary {:lo 0.2 :hi 5.0}}]}
