@@ -33,7 +33,7 @@
   Deterministic: MemStore + mock advisor + pure `agritrade.registry`
   record construction -- no clock, no randomness. Re-running produces
   byte-identical output."
-  (:require [kotoba.lang.text :as str]
+  (:require [kotoba.io :as kio] [kotoba.lang.text :as str]
             [agritrade.facts :as facts]
             [agritrade.governor :as governor]
             [agritrade.operation :as op]
@@ -434,8 +434,8 @@
 (defn -main [& args]
   (let [out (or (first args) "docs/samples/operator-console.html")
         db  (run-demo!)
-        f   (java.io.File. out)]
-    (some-> (.getParentFile f) (.mkdirs))
+        f   (kio/file out)]
+    (some-> (kio/parent-file f) (kio/mkdirs))
     (spit f (render db))
     (let [ledger (store/ledger db)
           holds  (filter #(= :governor-hold (:t %)) ledger)]
